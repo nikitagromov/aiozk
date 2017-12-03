@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import re
 import uuid
@@ -54,17 +53,15 @@ class SequentialRecipe(Recipe):
     async def analyze_siblings(self):
         siblings = await self.client.get_children(self.base_path)
         siblings = [name for name in siblings if sequential_re.match(name)]
-
         siblings.sort(key=self.sequence_number)
 
         owned_positions = {}
-
         for index, path in enumerate(siblings):
             if self.guid in path:
                 owned_positions[self.determine_znode_label(path)] = index
         return (owned_positions, siblings)
 
-    async def wait_on_sibling(self, sibling, time_limit=None):
+    async def wait_on_sibling(self, sibling):
         log.debug("Waiting on sibling %s", sibling)
 
         path = self.sibling_path(sibling)
@@ -74,11 +71,4 @@ class SequentialRecipe(Recipe):
         exists = await self.client.exists(path=path, watch=True)
         if not exists:
             unblocked.set_result(None)
-
-        try:
-            if time_limit:
-                await asyncio.wait_for(unblocked, time_limit, loop=self.client.loop)
-            else:
-                await unblocked
-        except asyncio.TimeoutError:
-            raise exc.TimeoutError
+        await unblocked

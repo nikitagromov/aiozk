@@ -20,11 +20,13 @@ class DoubleBarrier(SequentialRecipe):
         return self.sibling_path("sentinel")
 
     async def enter(self, timeout=None):
-        log.debug("Entering double barrier %s", self.base_path)
-        time_limit = None
-        if timeout is not None:
-            time_limit = time.time() + timeout
+        try:
+            await asyncio.wait_for(self._enter(), timeout, loop=self.client.loop)
+        except asyncio.TimeoutError:
+            raise exc.TimeoutError
 
+    async def _enter(self):
+        log.debug("Entering double barrier %s", self.base_path)
         barrier_lifted = self.client.wait_for_events(
             [WatchEvent.CREATED], self.sentinel_path
         )
@@ -41,28 +43,24 @@ class DoubleBarrier(SequentialRecipe):
         elif len(participants) >= self.min_participants:
             await self.create_znode(self.sentinel_path)
             return
+        await barrier_lifted
 
+    async def leave(self, timeout=None):
         try:
-            if time_limit:
-                await asyncio.wait_for(barrier_lifted, time_limit, loop=self.client.loop)
-            else:
-                await barrier_lifted
+            await asyncio.wait_for(self._leave(), timeout, loop=self.client.loop)
         except asyncio.TimeoutError:
             raise exc.TimeoutError
 
-    async def leave(self, timeout=None):
+    async def _leave(self):
         log.debug("Leaving double barrier %s", self.base_path)
-        time_limit = None
-        if timeout is not None:
-            time_limit = time.time() + timeout
 
         owned_positions, participants = await self.analyze_siblings()
         while len(participants) > 1:
             if owned_positions["worker"] == 0:
-                await self.wait_on_sibling(participants[-1], time_limit)
+                await self.wait_on_sibling(participants[-1])
             else:
                 await self.delete_unique_znode("worker")
-                await self.wait_on_sibling(participants[0], time_limit)
+                await self.wait_on_sibling(participants[0])
 
             owned_positions, participants = await self.analyze_siblings()
 

@@ -1,5 +1,4 @@
 import asyncio
-import time
 
 from .sequential import SequentialRecipe
 
@@ -36,12 +35,8 @@ class LeaderElection(SequentialRecipe):
         if self.has_leadership:
             return
 
-        time_limit = None
-        if timeout is not None:
-            time_limit = time.time() + timeout
-
-        if time_limit:
-            await asyncio.wait_for(self.leadership_future, time_limit, loop=self.client.loop)
+        if timeout:
+            await asyncio.wait_for(self.leadership_future, timeout, loop=self.client.loop)
         else:
             await self.leadership_future
 

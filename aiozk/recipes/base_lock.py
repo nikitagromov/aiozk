@@ -14,16 +14,16 @@ log = logging.getLogger(__name__)
 class BaseLock(SequentialRecipe):
 
     async def wait_in_line(self, znode_label, timeout=None, blocked_by=None):
-        time_limit = None
-        if timeout is not None:
-            time_limit = time.time() + timeout
+        try:
+            return await asyncio.wait_for(self._wait_in_line(znode_label, blocked_by), timeout,
+                                          loop=self.client.loop)
+        except asyncio.TimeoutError:
+            raise exc.TimeoutError
 
+    async def _wait_in_line(self, znode_label, blocked_by):
         await self.create_unique_znode(znode_label)
 
         while True:
-            if time_limit and time.time() >= time_limit:
-                raise exc.TimeoutError
-
             owned_positions, contenders = await self.analyze_siblings()
             if znode_label not in owned_positions:
                 raise exc.SessionLost
@@ -38,7 +38,7 @@ class BaseLock(SequentialRecipe):
             if not blockers:
                 break
 
-            await self.wait_on_sibling(blockers[-1], time_limit)
+            await self.wait_on_sibling(blockers[-1])
 
         return self.make_contextmanager(znode_label)
 

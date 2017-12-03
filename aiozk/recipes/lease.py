@@ -17,6 +17,8 @@ class Lease(SequentialRecipe):
         self.limit = limit
 
     async def obtain(self, duration):
+        # duration -> timedelta
+        # TODO: this recipe seems invalid right now
         lessees = await self.client.get_children(self.base_path)
 
         if len(lessees) >= self.limit:
@@ -27,6 +29,7 @@ class Lease(SequentialRecipe):
         try:
             await self.create_unique_znode("lease", data=str(time_limit))
         except exc.NodeExists:
+            # TODO: not sure if we can just skip this error
             log.warning("Lease for %s already obtained.", self.base_path)
 
         callback = partial(asyncio.ensure_future, self.release(), loop=self.client.loop)
